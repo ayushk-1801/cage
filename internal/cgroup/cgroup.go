@@ -18,10 +18,10 @@ type Config struct {
 
 func DefaultConfig() *Config {
 	return &Config{
-		MemoryLimit: 512 * 1024 * 1024,
-		CPUQuota:    50000,
-		CPUPeriod:   100000,
-		MaxPIDs:     100,
+		MemoryLimit: 512 * 1024 * 1024, // 512MB
+		CPUQuota:    50000,             // 50% of 1 CPU core
+		CPUPeriod:   100000,            // 100ms
+		MaxPIDs:     100,               // 100 PIDs
 	}
 }
 

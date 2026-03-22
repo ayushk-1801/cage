@@ -12,12 +12,12 @@
 - [x] Extract container logic into its own package
 
 ### Cgroups
-- [ ] Create cgroup directory per container
-- [ ] Set memory limit
-- [ ] Set CPU limit
-- [ ] Set max process limit
-- [ ] Add container PID to cgroup
-- [ ] Clean up cgroup on container exit
+- [x] Create cgroup directory per container
+- [x] Set memory limit
+- [x] Set CPU limit
+- [x] Set max process limit
+- [x] Add container PID to cgroup
+- [x] Clean up cgroup on container exit
 
 ### Container ID + State
 - [ ] Generate unique container ID
