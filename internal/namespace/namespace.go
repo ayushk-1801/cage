@@ -15,8 +15,13 @@ func NewParentProcess(args []string) *exec.Cmd {
 	cmd.Stderr = os.Stderr
 
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Cloneflags: syscall.CLONE_NEWNS | syscall.CLONE_NEWPID | syscall.CLONE_NEWUTS | syscall.CLONE_NEWIPC | syscall.CLONE_NEWNET,
-	}
+		Cloneflags: syscall.CLONE_NEWNS |
+			syscall.CLONE_NEWPID |
+			syscall.CLONE_NEWUTS |
+			syscall.CLONE_NEWIPC |
+			syscall.CLONE_NEWNET,
+		Foreground: true,
+}
 
 	return cmd
 }
@@ -25,14 +30,23 @@ func SetupNamespace(hostname, rootfs string) error {
 	if err := syscall.Sethostname([]byte(hostname)); err != nil {
 		return fmt.Errorf("sethostname: %w", err)
 	}
+
+	// prevent mount leaks
+	if err := syscall.Mount("", "/", "", syscall.MS_PRIVATE|syscall.MS_REC, ""); err != nil {
+		return fmt.Errorf("mount private: %w", err)
+	}
+
 	if err := syscall.Chroot(rootfs); err != nil {
 		return fmt.Errorf("chroot: %w", err)
 	}
+
 	if err := os.Chdir("/"); err != nil {
 		return fmt.Errorf("chdir: %w", err)
 	}
+
 	if err := syscall.Mount("proc", "/proc", "proc", 0, ""); err != nil {
 		return fmt.Errorf("mount proc: %w", err)
 	}
+
 	return nil
 }

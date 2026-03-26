@@ -5,15 +5,45 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
+	"time"
 
 	"github.com/ayushk-1801/cage/internal/cgroup"
 	"github.com/ayushk-1801/cage/internal/namespace"
+	"github.com/ayushk-1801/cage/internal/seccomp"
 )
 
 type Container struct {
-	ID       string
-	Rootfs   string
-	Hostname string
+	ID          string
+	Name        string
+	Hostname    string
+	Status      string
+	PID         int
+	ExitCode    int
+	IP          string
+	ImageID     string
+	Rootfs      string
+	Cmd         []string
+	Env         []string
+	Mounts      []string
+	Ports       []PortMap
+	HealthCheck HealthCheck
+	CreatedAt   time.Time
+	StartedAt   time.Time
+	FinishedAt  time.Time
+	Labels      map[string]string
+}
+
+type HealthCheck struct {
+	Test     []string
+	Interval time.Duration
+	Timeout  time.Duration
+	Retries  int
+}
+
+type PortMap struct {
+	HostPort      int
+	ContainerPort int
+	Protocol      string
 }
 
 func New(id, rootfs string) *Container {
@@ -25,23 +55,50 @@ func New(id, rootfs string) *Container {
 }
 
 func (c *Container) Run(args []string) error {
+	c.Status = "created"
+	c.CreatedAt = time.Now()
+	c.Cmd = args
+
 	cg := cgroup.New(c.ID)
 	if err := cg.Create(cgroup.DefaultConfig()); err != nil {
 		return fmt.Errorf("create cgroup: %w", err)
 	}
+
 	cmd := namespace.NewParentProcess(args)
+
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("start process: %w", err)
 	}
-	if err := cg.AddProcess(cmd.Process.Pid); err != nil {
+
+	c.PID = cmd.Process.Pid
+	c.Status = "running"
+	c.StartedAt = time.Now()
+
+	if err := cg.AddProcess(c.PID); err != nil {
 		return fmt.Errorf("add to cgroup: %w", err)
 	}
-	if err := cmd.Wait(); err != nil {
-		return fmt.Errorf("wait: %w", err)
+
+	err := cmd.Wait()
+
+	c.FinishedAt = time.Now()
+	c.Status = "stopped"
+
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			if ws, ok := exitErr.Sys().(syscall.WaitStatus); ok {
+				c.ExitCode = ws.ExitStatus()
+			}
+		} else {
+			c.ExitCode = 1
+		}
+	} else {
+		c.ExitCode = 0
 	}
+
 	if err := cg.Destroy(); err != nil {
 		return fmt.Errorf("destroy cgroup: %w", err)
 	}
+
 	return nil
 }
 
@@ -50,12 +107,25 @@ func (c *Container) Child(args []string) error {
 		return fmt.Errorf("setup namespace: %w", err)
 	}
 
+	if err := os.Chdir("/"); err != nil {
+		return err
+	}
+
 	path, err := exec.LookPath(args[0])
 	if err != nil {
 		path = args[0]
 	}
 
-	if err := syscall.Exec(path, args, os.Environ()); err != nil {
+	if err := seccomp.Apply(); err != nil {
+		return fmt.Errorf("apply seccomp: %w", err)
+	}
+
+	env := []string{
+		"PATH=/bin:/usr/bin",
+		"TERM=xterm",
+	}
+
+	if err := syscall.Exec(path, args, env); err != nil {
 		return fmt.Errorf("exec: %w", err)
 	}
 
